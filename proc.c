@@ -88,6 +88,8 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->ctime = ticks;
+  p->rtime = 0;
 
   release(&ptable.lock);
 
@@ -246,6 +248,7 @@ exit(void)
   iput(curproc->cwd);
   end_op();
   curproc->cwd = 0;
+  curproc->etime = ticks;
 
   acquire(&ptable.lock);
 
@@ -311,6 +314,55 @@ wait(void)
   }
 }
 
+// An extension of wait
+// Stores wait time and running time
+// in wtime and rtime respectively
+int
+waitx(int *wtime, int *rtime) {
+  struct proc *p;
+  int havekids, pid;
+  struct proc *curproc = myproc();
+  
+  acquire(&ptable.lock);
+  for(;;){
+    // Scan through table looking for exited children.
+    havekids = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->parent != curproc)
+        continue;
+      havekids = 1;
+      if(p->state == ZOMBIE){
+        // Found one.
+        pid = p->pid;
+        kfree(p->kstack);
+        p->kstack = 0;
+        freevm(p->pgdir);
+        p->pid = 0;
+        p->parent = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+        p->state = UNUSED;
+
+        // Store return state
+        *rtime = p->rtime;
+        *wtime = ticks - p->ctime - p->rtime;
+
+        release(&ptable.lock);
+        return pid;
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if(!havekids || curproc->killed){
+      release(&ptable.lock);
+      return -1;
+    }
+
+    // Wait for children to exit.  (See wakeup1 call in proc_exit.)
+    sleep(curproc, &ptable.lock);  //DOC: wait-sleep
+  }
+} 
+
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -325,7 +377,7 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
-  
+
   for(;;){
     // Enable interrupts on this processor.
     sti();
@@ -362,7 +414,7 @@ scheduler(void)
 // be proc->intena and proc->ncli, but that would
 // break in the few places where a lock is held but
 // there's no process.
-void
+  void
 sched(void)
 {
   int intena;
@@ -382,7 +434,7 @@ sched(void)
 }
 
 // Give up the CPU for one scheduling round.
-void
+  void
 yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
@@ -393,7 +445,7 @@ yield(void)
 
 // A fork child's very first scheduling by scheduler()
 // will swtch here.  "Return" to user space.
-void
+  void
 forkret(void)
 {
   static int first = 1;
@@ -414,11 +466,11 @@ forkret(void)
 
 // Atomically release lock and sleep on chan.
 // Reacquires lock when awakened.
-void
+  void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
-  
+
   if(p == 0)
     panic("sleep");
 
@@ -454,7 +506,7 @@ sleep(void *chan, struct spinlock *lk)
 //PAGEBREAK!
 // Wake up all processes sleeping on chan.
 // The ptable lock must be held.
-static void
+  static void
 wakeup1(void *chan)
 {
   struct proc *p;
@@ -465,7 +517,7 @@ wakeup1(void *chan)
 }
 
 // Wake up all processes sleeping on chan.
-void
+  void
 wakeup(void *chan)
 {
   acquire(&ptable.lock);
@@ -476,7 +528,7 @@ wakeup(void *chan)
 // Kill the process with the given pid.
 // Process won't exit until it returns
 // to user space (see trap in trap.c).
-int
+  int
 kill(int pid)
 {
   struct proc *p;
@@ -500,16 +552,16 @@ kill(int pid)
 // Print a process listing to console.  For debugging.
 // Runs when user types ^P on console.
 // No lock to avoid wedging a stuck machine further.
-void
+  void
 procdump(void)
 {
   static char *states[] = {
-  [UNUSED]    "unused",
-  [EMBRYO]    "embryo",
-  [SLEEPING]  "sleep ",
-  [RUNNABLE]  "runble",
-  [RUNNING]   "run   ",
-  [ZOMBIE]    "zombie"
+    [UNUSED]    "unused",
+    [EMBRYO]    "embryo",
+    [SLEEPING]  "sleep ",
+    [RUNNABLE]  "runble",
+    [RUNNING]   "run   ",
+    [ZOMBIE]    "zombie"
   };
   int i;
   struct proc *p;
