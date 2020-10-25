@@ -363,6 +363,29 @@ waitx(int *wtime, int *rtime) {
   }
 } 
 
+// Standard round robin scheduler
+// that comes along with xv6
+static struct proc*
+roundrobin(void) {
+  // Using a static variable so that we can do
+  // round robin scheduling
+  static int curr = -1;
+  struct proc *p;
+  for(int trail = 0; trail < NPROC; trail++) {
+    curr++;
+    if (curr == NPROC) {
+      curr = 0;
+    }
+
+    p = &ptable.proc[curr];
+    if(p->state != RUNNABLE)
+      continue;
+    return p;
+  }
+
+  return 0;
+}
+
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -382,12 +405,14 @@ scheduler(void)
     // Enable interrupts on this processor.
     sti();
 
-    // Loop over process table looking for process to run.
+    // Get process based on type of scheduler
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
+    p = roundrobin();
 
+    // Convention: If no process is runable,
+    // the specific scheduling function should
+    // return NULL
+    if (p) {
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
@@ -403,9 +428,9 @@ scheduler(void)
       c->proc = 0;
     }
     release(&ptable.lock);
-
   }
 }
+
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores
@@ -414,7 +439,7 @@ scheduler(void)
 // be proc->intena and proc->ncli, but that would
 // break in the few places where a lock is held but
 // there's no process.
-  void
+void
 sched(void)
 {
   int intena;
@@ -434,7 +459,7 @@ sched(void)
 }
 
 // Give up the CPU for one scheduling round.
-  void
+void
 yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
@@ -466,7 +491,7 @@ forkret(void)
 
 // Atomically release lock and sleep on chan.
 // Reacquires lock when awakened.
-  void
+void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
@@ -506,7 +531,7 @@ sleep(void *chan, struct spinlock *lk)
 //PAGEBREAK!
 // Wake up all processes sleeping on chan.
 // The ptable lock must be held.
-  static void
+static void
 wakeup1(void *chan)
 {
   struct proc *p;
@@ -528,7 +553,7 @@ wakeup(void *chan)
 // Kill the process with the given pid.
 // Process won't exit until it returns
 // to user space (see trap in trap.c).
-  int
+int
 kill(int pid)
 {
   struct proc *p;
@@ -552,7 +577,7 @@ kill(int pid)
 // Print a process listing to console.  For debugging.
 // Runs when user types ^P on console.
 // No lock to avoid wedging a stuck machine further.
-  void
+void
 procdump(void)
 {
   static char *states[] = {
