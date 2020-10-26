@@ -103,3 +103,25 @@ sys_waitx(void)
 
   return waitx((int*)wtime, (int*)rtime);
 }
+
+int
+sys_set_priority(void)
+{
+  // Return -1 if PBS isnt defined
+#ifndef PBS
+  return -1;
+#endif
+
+  int new_prio, pid;
+  if (argint(0, &new_prio) < 0) {
+    return -1;
+  } else if (argint(1, &pid) < 0) {
+    return -1;
+  }
+
+  if (new_prio > 100 || new_prio < 0) {
+    return -1;
+  }
+
+  return set_priority(new_prio, pid);
+}

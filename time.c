@@ -12,7 +12,7 @@ main(int argc, char *argv[])
 
   if (!child_pid) {
     volatile int a = 0;
-    for (int i = 0; i < 2000000000; i++) {
+    for (int i = 0; i < 500000000; i++) {
       a++; 
     }
     printf(1, "%d\n", a);

@@ -90,6 +90,7 @@ found:
   p->pid = nextpid++;
   p->ctime = ticks;
   p->rtime = 0;
+  p->nice = 60;
 
   release(&ptable.lock);
 
@@ -363,10 +364,35 @@ waitx(int *wtime, int *rtime) {
   }
 } 
 
+#ifdef FCFS
+// FCFS scheduler
+// Non Premptive scheduler
+static struct proc*
+fcfs(void)
+{
+  struct proc *p, *chosen;
+
+  // Initialize as non existent
+  chosen = 0;
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if (p->state != RUNNABLE) {
+      continue;
+    }
+
+    if (chosen == 0 || chosen->ctime > p->ctime) {
+      chosen = p;
+    }
+  }
+  return chosen;
+}
+#endif
+
+#ifdef RR
 // Standard round robin scheduler
 // that comes along with xv6
 static struct proc*
-roundrobin(void) {
+roundrobin(void)
+{
   // Using a static variable so that we can do
   // round robin scheduling
   static int curr = -1;
@@ -385,6 +411,58 @@ roundrobin(void) {
 
   return 0;
 }
+#endif
+
+int
+set_priority(int new_prio, int pid) 
+{
+  acquire(&ptable.lock);
+  for(struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->pid == pid){
+      int old_prio = p->nice;
+      p->nice = new_prio;
+      release(&ptable.lock);
+      return old_prio;
+    }
+  }
+  release(&ptable.lock);
+  return -1;
+}
+
+#ifdef PBS
+static struct proc*
+pbs(void)
+{
+  // Use static variable so we can do
+  // round robin scheduling
+  static int last = -1;
+  struct proc *p, *chosen;
+
+  // Initialize as non existent
+  chosen = 0;
+
+  // Start from last chosen element + 1
+  int curr = last;
+  for(int trail = 0; trail < NPROC; trail++) {
+    curr++;
+    if (curr == NPROC) {
+      curr = 0;
+    }
+
+    p = &ptable.proc[curr];
+    if (p->state != RUNNABLE) {
+      continue;
+    }
+
+    if (chosen == 0 || p->nice < chosen->nice) {
+      last = curr;
+      chosen = p;
+    }
+  }
+
+  return chosen;
+}
+#endif
 
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
@@ -395,7 +473,7 @@ roundrobin(void) {
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
 void
-scheduler(void)
+scheduler(void;)
 {
   struct proc *p;
   struct cpu *c = mycpu();
@@ -405,9 +483,17 @@ scheduler(void)
     // Enable interrupts on this processor.
     sti();
 
-    // Get process based on type of scheduler
     acquire(&ptable.lock);
+    // Get process based on type of scheduler
+#ifdef FCFS
+    p = fcfs();
+#endif
+#ifdef RR
     p = roundrobin();
+#endif
+#ifdef PBS
+    p = pbs();
+#endif
 
     // Convention: If no process is runable,
     // the specific scheduling function should
@@ -470,7 +556,7 @@ yield(void)
 
 // A fork child's very first scheduling by scheduler()
 // will swtch here.  "Return" to user space.
-  void
+void
 forkret(void)
 {
   static int first = 1;
@@ -583,9 +669,9 @@ procdump(void)
   static char *states[] = {
     [UNUSED]    "unused",
     [EMBRYO]    "embryo",
-    [SLEEPING]  "sleep ",
-    [RUNNABLE]  "runble",
-    [RUNNING]   "run   ",
+    [SLEEPING]  "sleeping",
+    [RUNNABLE]  "runnable",
+    [RUNNING]   "running",
     [ZOMBIE]    "zombie"
   };
   int i;
@@ -593,6 +679,7 @@ procdump(void)
   char *state;
   uint pc[10];
 
+  cprintf("PID")
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == UNUSED)
       continue;
