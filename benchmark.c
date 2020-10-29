@@ -1,7 +1,7 @@
 #include "types.h"
 #include "user.h"
 
-int n_proc = 10;
+int n_proc = 16;
 
 int
 main(void) 
@@ -18,7 +18,7 @@ main(void)
       printf(2, "Ded %d\n", i);
       exit();
     } else {
-      set_priority(60 - i, pid);
+      set_priority(60 - i / 4, pid);
       printf(2, "Index: %d Pid: %d\n", i, pid);
     }
   }

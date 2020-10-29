@@ -464,6 +464,14 @@ pbs(void)
 }
 #endif
 
+#ifdef MLFQ
+static struct proc*
+mlfq(void)
+{
+
+}
+#endif
+
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -493,6 +501,9 @@ scheduler(void;)
 #endif
 #ifdef PBS
     p = pbs();
+#endif
+#ifdef MLFQ
+    p = mlfq();
 #endif
 
     // Convention: If no process is runable,
@@ -672,14 +683,13 @@ procdump(void)
     [SLEEPING]  "sleeping",
     [RUNNABLE]  "runnable",
     [RUNNING]   "running",
-    [ZOMBIE]    "zombie"
+    [ZOMBIE]    "zombie",
   };
-  int i;
   struct proc *p;
   char *state;
-  uint pc[10];
 
-  cprintf("PID")
+  cprintf("PID\tName\tPriority\tState\tr_time\n\n");
+  acquire(&ptable.lock);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == UNUSED)
       continue;
@@ -687,12 +697,7 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    cprintf("%d %s %s", p->pid, state, p->name);
-    if(p->state == SLEEPING){
-      getcallerpcs((uint*)p->context->ebp+2, pc);
-      for(i=0; i<10 && pc[i] != 0; i++)
-        cprintf(" %p", pc[i]);
-    }
-    cprintf("\n");
+    cprintf("%d\t%s\t%d\t%s\t%d\n", p->pid, p->name, p->nice, state, p->rtime);
   }
+  release(&ptable.lock);
 }
