@@ -55,6 +55,8 @@ trap(struct trapframe *tf)
       release(&tickslock);
       if (myproc()) {
         myproc()->rtime++;
+        myproc()->q[myproc()->level]++;
+        myproc()->change_queue--;
       }
     }
     lapiceoi();
@@ -104,11 +106,25 @@ trap(struct trapframe *tf)
     exit();
 
 #ifndef FCFS
+
   // Force process to give up CPU on clock tick.
   // If interrupts were on while locks held, would need to check nlock.
-  if(myproc() && myproc()->state == RUNNING &&
-     tf->trapno == T_IRQ0+IRQ_TIMER)
+  if (myproc() && myproc()->state == RUNNING && 
+      tf->trapno == T_IRQ0+IRQ_TIMER) {
+#ifdef MLFQ
+    struct proc *p = myproc();
+    if (p->change_queue <= 0) {
+      if (p->level + 1 != NMLFQ) {
+        p->level++;
+        p->q_enter = ticks;
+      }
+      yield();
+    }
+#else
     yield();
+#endif
+  }
+
 #endif
 
   // Check if the process has been killed since we yielded

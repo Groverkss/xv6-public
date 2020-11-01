@@ -53,6 +53,12 @@ struct proc {
   int etime;                   // End Time
   int rtime;                   // Run Time
   int nice;                    // Priority: lower niceness ==> higher priority
+  int level;
+  int in_queue;
+  int change_queue;
+  int n_run;
+  int q_enter;
+  int q[NMLFQ];
 };
 
 // Process memory is laid out contiguously, low addresses first:
@@ -60,3 +66,21 @@ struct proc {
 //   original data and bss
 //   fixed-size stack
 //   expandable heap
+
+struct Queue {
+  int head, tail;
+  struct proc *array[NPROC + 1];
+  int size;
+};
+
+void push(struct Queue *list, struct proc *element);
+
+void pop(struct Queue *list);
+
+struct proc *front(struct Queue *list);
+
+void qerase(struct Queue *list, int pid);
+
+struct Queue mlfq[NMLFQ];
+
+void ageing(void);

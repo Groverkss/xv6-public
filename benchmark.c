@@ -1,31 +1,39 @@
 #include "types.h"
 #include "user.h"
 
-int n_proc = 16;
+int number_of_processes = 10;
 
-int
-main(void) 
+int main(int argc, char *argv[])
 {
-
-  set_priority(5, getpid());
-  for (int i = 0; i < n_proc; i++) {
+  int j;
+  for (j = 0; j < number_of_processes; j++)
+  {
     int pid = fork();
-
-    if (!pid) {
-      for (volatile int i = 0; i < 1000000000; i++) {
-        ;
+    if (pid < 0)
+    {
+      printf(1, "Fork failed\n");
+      continue;
+    }
+    if (pid == 0)
+    {
+      volatile int i;
+      for (volatile int k = 0; k < number_of_processes; k++)
+      {
+        for (i = 0; i < 100000000; i++)
+        {
+          ; //cpu time
+        }
       }
-      printf(2, "Ded %d\n", i);
+      printf(1, "Process: %d Finished\n", j);
       exit();
-    } else {
-      set_priority(60 - i / 4, pid);
-      printf(2, "Index: %d Pid: %d\n", i, pid);
+    }
+    else {
+      set_priority(100-(20+j),pid); // will only matter for PBS, comment it out if not implemented yet (better priorty for more IO intensive jobs)
     }
   }
-
-  for (int i = 0; i < n_proc; i++) {
+  for (j = 0; j < number_of_processes+5; j++)
+  {
     wait();
   }
-
   exit();
 }

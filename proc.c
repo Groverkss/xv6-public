@@ -23,6 +23,11 @@ static void wakeup1(void *chan);
 void
 pinit(void)
 {
+  for (int i = 0; i < NMLFQ; i++) {
+    mlfq[i].size = 0;
+    mlfq[i].head = 0;
+    mlfq[i].tail = 0;
+  }
   initlock(&ptable.lock, "ptable");
 }
 
@@ -91,6 +96,15 @@ found:
   p->ctime = ticks;
   p->rtime = 0;
   p->nice = 60;
+  p->level = 0;
+  p->change_queue = 1 << p->level;
+  p->in_queue = 0;
+  p->q_enter = ticks;
+  p->n_run = 0;
+
+  for (int i = 0; i < NMLFQ; i++) {
+    p->q[i] = 0;
+  }
 
   release(&ptable.lock);
 
@@ -466,9 +480,30 @@ pbs(void)
 
 #ifdef MLFQ
 static struct proc*
-mlfq(void)
+mlfq_sched(void)
 {
+  // ageing();
+  /* Add runnable process to queue */
+  for (struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if (p->state == RUNNABLE && p->in_queue == 0) {
+      push(&mlfq[p->level], p);
+      p->in_queue = 1;
+    }
+  }
 
+  for (int level = 0; level < NMLFQ; level++) {
+    while (mlfq[level].size) {
+      struct proc *p = front(&mlfq[level]);
+      pop(&mlfq[level]);
+      p->in_queue = 0;
+      if (p->state == RUNNABLE) {
+        p->q_enter = ticks;
+        return p;
+      }
+    } 
+  }
+
+  return 0;
 }
 #endif
 
@@ -503,7 +538,7 @@ scheduler(void;)
     p = pbs();
 #endif
 #ifdef MLFQ
-    p = mlfq();
+    p = mlfq_sched();
 #endif
 
     // Convention: If no process is runable,
@@ -513,9 +548,12 @@ scheduler(void;)
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
+      p->change_queue = 1 << p->level;
       c->proc = p;
       switchuvm(p);
       p->state = RUNNING;
+      p->q_enter = ticks;
+      p->n_run++;
 
       swtch(&(c->scheduler), p->context);
       switchkvm();
@@ -551,6 +589,7 @@ sched(void)
   if(readeflags()&FL_IF)
     panic("sched interruptible");
   intena = mycpu()->intena;
+
   swtch(&p->context, mycpu()->scheduler);
   mycpu()->intena = intena;
 }
@@ -559,15 +598,16 @@ sched(void)
 void
 yield(void)
 {
+  struct proc *p = myproc();
   acquire(&ptable.lock);  //DOC: yieldlock
-  myproc()->state = RUNNABLE;
+  p->state = RUNNABLE;
   sched();
   release(&ptable.lock);
 }
 
 // A fork child's very first scheduling by scheduler()
 // will swtch here.  "Return" to user space.
-void
+  void
 forkret(void)
 {
   static int first = 1;
@@ -588,7 +628,7 @@ forkret(void)
 
 // Atomically release lock and sleep on chan.
 // Reacquires lock when awakened.
-void
+  void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
@@ -628,14 +668,15 @@ sleep(void *chan, struct spinlock *lk)
 //PAGEBREAK!
 // Wake up all processes sleeping on chan.
 // The ptable lock must be held.
-static void
+  static void
 wakeup1(void *chan)
 {
   struct proc *p;
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == SLEEPING && p->chan == chan)
+    if(p->state == SLEEPING && p->chan == chan) {
       p->state = RUNNABLE;
+    }
 }
 
 // Wake up all processes sleeping on chan.
@@ -660,14 +701,31 @@ kill(int pid)
     if(p->pid == pid){
       p->killed = 1;
       // Wake process from sleep if necessary.
-      if(p->state == SLEEPING)
+      if(p->state == SLEEPING) {
         p->state = RUNNABLE;
+      }
       release(&ptable.lock);
       return 0;
     }
   }
   release(&ptable.lock);
   return -1;
+}
+
+void
+ageing(void) {
+  for (struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if (p->state == RUNNABLE && ticks - p->q_enter >= AGETICK) {
+      cprintf("Ageing: %d\n", p->pid);
+      if (p->in_queue) {
+        qerase(&mlfq[p->level], p->pid);
+      }
+      if (p->level != 0) {
+        p->level--;
+      }
+      p->q_enter = ticks;
+    }
+  }
 }
 
 //PAGEBREAK: 36
@@ -678,18 +736,24 @@ void
 procdump(void)
 {
   static char *states[] = {
-    [UNUSED]    "unused",
-    [EMBRYO]    "embryo",
+    [UNUSED]    "unused  ",
+    [EMBRYO]    "embryo  ",
     [SLEEPING]  "sleeping",
     [RUNNABLE]  "runnable",
-    [RUNNING]   "running",
-    [ZOMBIE]    "zombie",
+    [RUNNING]   "running ",
+    [ZOMBIE]    "zombie  ",
   };
   struct proc *p;
   char *state;
 
-  cprintf("PID\tName\tPriority\tState\tr_time\n\n");
-  acquire(&ptable.lock);
+  cprintf("PID\tPriority\tState\tR_Time\tW_Time\tN_run\t");
+#ifdef MLFQ
+  cprintf("Level\t");
+  for (int i = 0; i < NMLFQ; i++) {
+    cprintf("q%d\t", i);
+  }
+#endif
+  cprintf("\n\n\n");
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == UNUSED)
       continue;
@@ -697,7 +761,14 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    cprintf("%d\t%s\t%d\t%s\t%d\n", p->pid, p->name, p->nice, state, p->rtime);
+    cprintf("%d\t%d\t%s\t%d\t%d\t%d\t", p->pid, p->nice,
+        state, p->rtime, ticks - p->q_enter, p->n_run);
+#ifdef MLFQ
+    cprintf("%d\t", p->level);
+   for (int i = 0; i < NMLFQ; i++) {
+      cprintf("%d\t", p->q[i]);
+    }
+#endif
+    cprintf("\n\n\n");
   }
-  release(&ptable.lock);
 }
