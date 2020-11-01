@@ -116,7 +116,6 @@ trap(struct trapframe *tf)
     if (p->change_queue <= 0) {
       if (p->level + 1 != NMLFQ) {
         p->level++;
-        p->q_enter = ticks;
       }
       yield();
     }

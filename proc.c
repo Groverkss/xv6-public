@@ -482,7 +482,7 @@ pbs(void)
 static struct proc*
 mlfq_sched(void)
 {
-  // ageing();
+  ageing();
   /* Add runnable process to queue */
   for (struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
     if (p->state == RUNNABLE && p->in_queue == 0) {
@@ -716,9 +716,9 @@ void
 ageing(void) {
   for (struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
     if (p->state == RUNNABLE && ticks - p->q_enter >= AGETICK) {
-      cprintf("Ageing: %d\n", p->pid);
       if (p->in_queue) {
         qerase(&mlfq[p->level], p->pid);
+        p->in_queue = 0;
       }
       if (p->level != 0) {
         p->level--;
