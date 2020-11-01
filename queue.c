@@ -58,6 +58,7 @@ qerase(struct Queue *list, int pid)
   }
 
   list->tail--;
+  list->size--;
   if (list->tail < 0) {
     list->tail = NPROC;
   }

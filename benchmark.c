@@ -23,6 +23,7 @@ int main(int argc, char *argv[])
         {
           ; //cpu time
         }
+        sleep(50);
       }
       printf(1, "Process: %d Finished\n", j);
       exit();
