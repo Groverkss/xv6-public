@@ -561,6 +561,7 @@ scheduler(void;)
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       c->proc = 0;
+      p->q_enter = ticks;
     }
     release(&ptable.lock);
   }
@@ -713,7 +714,8 @@ kill(int pid)
 }
 
 void
-ageing(void) {
+ageing(void)
+{
   for (struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
     if (p->state == RUNNABLE && ticks - p->q_enter >= AGETICK) {
       if (p->in_queue) {
@@ -722,10 +724,25 @@ ageing(void) {
       }
       if (p->level != 0) {
         p->level--;
+        cprintf("MLFQ: %d demoted To %d %d\n", p->pid, p->level, ticks);
       }
       p->q_enter = ticks;
     }
   }
+}
+
+void
+update_runtime(void) 
+{
+  acquire(&ptable.lock);
+  for (struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if (p->state == RUNNING) {
+      p->rtime++;
+      p->q[p->level]++;
+      p->change_queue--;
+    }
+  }
+  release(&ptable.lock);
 }
 
 //PAGEBREAK: 36

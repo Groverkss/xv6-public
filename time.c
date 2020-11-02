@@ -2,25 +2,28 @@
 #include "user.h"
 
 int
-main(int argc, char *argv[]) 
+main(int argc, char * argv[])
 {
-  int child_pid = fork();
-  if (child_pid == -1) {
-    printf(2, "Error while forking\n");
+  if(argc == 1) {
+    printf(2, "Usage: time command [...args]\n");
     exit();
   }
 
-  if (!child_pid) {
-    volatile int a = 0;
-    for (int i = 0; i < 500000000; i++) {
-      a++; 
-    }
-    printf(1, "%d\n", a);
+  int f = fork();
+
+  if(f < 0) {
+    printf(2, "fork() failed\n");
+    exit();
+  } else if(f == 0) {
+    exec(argv[1], argv + 1);
+    printf(2, "exec() failed\n");
     exit();
   } else {
-    int wtime, rtime;
+    int rtime, wtime;
     waitx(&wtime, &rtime);
-    printf(1, "Parent: Wait Time: %d, Run Time: %d\n", wtime, rtime);
-    exit();
+
+    printf(1, "rtime = %d\nwtime = %d\n", rtime, wtime);
   }
+
+  exit();
 }

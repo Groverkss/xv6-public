@@ -48,16 +48,12 @@ trap(struct trapframe *tf)
 
   switch(tf->trapno){
   case T_IRQ0 + IRQ_TIMER:
-    if(cpuid() == 0){
+    if(cpuid() == 0) {
       acquire(&tickslock);
       ticks++;
       wakeup(&ticks);
       release(&tickslock);
-      if (myproc()) {
-        myproc()->rtime++;
-        myproc()->q[myproc()->level]++;
-        myproc()->change_queue--;
-      }
+      update_runtime();
     }
     lapiceoi();
     break;
@@ -116,6 +112,7 @@ trap(struct trapframe *tf)
     if (p->change_queue <= 0) {
       if (p->level + 1 != NMLFQ) {
         p->level++;
+        cprintf("MLFQ: %d promoted To %d %d\n", p->pid, p->level, ticks);
       }
       yield();
     }

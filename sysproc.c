@@ -125,3 +125,10 @@ sys_set_priority(void)
 
   return set_priority(new_prio, pid);
 }
+
+int
+sys_ps(void)
+{
+  procdump();
+  return 0;
+}
