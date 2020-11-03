@@ -724,7 +724,6 @@ ageing(void)
       }
       if (p->level != 0) {
         p->level--;
-        cprintf("MLFQ: %d demoted To %d %d\n", p->pid, p->level, ticks);
       }
       p->q_enter = ticks;
     }

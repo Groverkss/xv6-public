@@ -7,7 +7,9 @@ const int NSLEEP = 1e8;
 int main(int argc, char *argv[])
 {
   for (volatile int i = 1; i <= NITER; i++) {
-    ;
+    if (i % NSLEEP == 0) {
+      sleep(20);
+    } 
   }
   exit();
 }
